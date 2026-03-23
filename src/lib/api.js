@@ -1,22 +1,20 @@
 const API_URL = import.meta.env.PROD ? '/api' : 'http://localhost:3001/api';
 
-const HEADERS = {
-  'Content-Type': 'application/json',
-  // Pseudo-auth for MVP sync via headers
-  'X-User-Id': 'imiraz_mvp' 
-};
+function getHeaders() {
+  const token = localStorage.getItem('wotn_token');
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {})
+  };
+}
 
 function camelize(obj) {
   if (Array.isArray(obj)) return obj.map(camelize);
   if (obj !== null && typeof obj === 'object') {
     return Object.keys(obj).reduce((acc, key) => {
-      // Postgres COUNT() returns "observationcount" entirely lowercase if not quoted,
-      // so let's manually map the known ones or just rely on the server returning correct aliases.
-      // Wait, let's just do a generic replace and handle the specific DB aliases.
       let camelKey = key.replace(/_([a-z])/g, g => g[1].toUpperCase());
       if (key === 'observationcount') camelKey = 'observationCount';
       if (key === 'lastobservationdate') camelKey = 'lastObservationDate';
-      
       acc[camelKey] = camelize(obj[key]);
       return acc;
     }, {});
@@ -25,14 +23,14 @@ function camelize(obj) {
 }
 
 export async function getPeople() {
-  const res = await fetch(`${API_URL}/people`, { headers: HEADERS });
+  const res = await fetch(`${API_URL}/people`, { headers: getHeaders() });
   return camelize(await res.json());
 }
 
 export async function createPerson({ name, relationshipType, firstImpression }) {
   const res = await fetch(`${API_URL}/people`, {
     method: 'POST',
-    headers: HEADERS,
+    headers: getHeaders(),
     body: JSON.stringify({ name, relationshipType, firstImpression })
   });
   if (!res.ok) throw new Error(await res.text());
@@ -40,7 +38,7 @@ export async function createPerson({ name, relationshipType, firstImpression }) 
 }
 
 export async function getPerson(id) {
-  const res = await fetch(`${API_URL}/people/${id}`, { headers: HEADERS });
+  const res = await fetch(`${API_URL}/people/${id}`, { headers: getHeaders() });
   if (!res.ok) throw new Error('Not found');
   return camelize(await res.json());
 }
@@ -50,14 +48,14 @@ export async function deletePerson(id) {
 }
 
 export async function getObservations(personId) {
-  const res = await fetch(`${API_URL}/observations/${personId}`, { headers: HEADERS });
+  const res = await fetch(`${API_URL}/observations/${personId}`, { headers: getHeaders() });
   return camelize(await res.json());
 }
 
 export async function createObservation({ personId, text, tags, sentiment }) {
   const res = await fetch(`${API_URL}/observations`, {
     method: 'POST',
-    headers: HEADERS,
+    headers: getHeaders(),
     body: JSON.stringify({ personId, text, tags, sentiment })
   });
   return camelize(await res.json());
@@ -66,7 +64,7 @@ export async function createObservation({ personId, text, tags, sentiment }) {
 export async function generatePrediction(personId, goal) {
   const res = await fetch(`${API_URL}/predict`, {
     method: 'POST',
-    headers: HEADERS,
+    headers: getHeaders(),
     body: JSON.stringify({ personId, goal })
   });
   if (!res.ok) throw new Error(await res.text());
@@ -79,14 +77,14 @@ export async function getPredictions(personId) {
 }
 
 export async function getOutcomes(personId) {
-  const res = await fetch(`${API_URL}/outcomes/${personId}`, { headers: HEADERS });
+  const res = await fetch(`${API_URL}/outcomes/${personId}`, { headers: getHeaders() });
   return camelize(await res.json());
 }
 
 export async function createOutcome({ personId, predictionId, goal, whatHappened, predictionAccuracyRating }) {
   const res = await fetch(`${API_URL}/outcomes`, {
     method: 'POST',
-    headers: HEADERS,
+    headers: getHeaders(),
     body: JSON.stringify({ personId, predictionId, goal, whatHappened, accuracyRating: predictionAccuracyRating })
   });
   return camelize(await res.json());

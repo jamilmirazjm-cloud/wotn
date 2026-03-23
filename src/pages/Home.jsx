@@ -1,9 +1,12 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { LogOut } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 
 export default function Home({ onOpenAddPerson }) {
   const { people, refreshPeople } = useApp();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -26,7 +29,20 @@ export default function Home({ onOpenAddPerson }) {
 
   return (
     <div className="page">
-      <h1 className="page-title">People</h1>
+      <div className="home-header">
+        <h1 className="page-title" style={{ margin: 0 }}>People</h1>
+        <div className="home-user">
+          <span className="home-username">{user?.username}</span>
+          <button
+            className="logout-btn"
+            onClick={logout}
+            aria-label="Sign out"
+            title="Sign out"
+          >
+            <LogOut size={16} />
+          </button>
+        </div>
+      </div>
       <p className="page-subtitle">
         {people.length === 0
           ? 'Start by adding someone you want to understand better'

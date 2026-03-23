@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
 import { AppProvider, useApp } from './context/AppContext';
+import ProtectedRoute from './components/ProtectedRoute';
+import LoginPage from './pages/LoginPage';
 import Home from './pages/Home';
 import ProfileView from './pages/ProfileView';
 import AddObservation from './pages/AddObservation';
@@ -56,9 +59,24 @@ function AppRoutes() {
 export default function App() {
   return (
     <BrowserRouter>
-      <AppProvider>
-        <AppRoutes />
-      </AppProvider>
+      <AuthProvider>
+        <Routes>
+          {/* Public route */}
+          <Route path="/login" element={<LoginPage />} />
+
+          {/* All protected routes — AppProvider only mounts when authenticated */}
+          <Route
+            path="/*"
+            element={
+              <ProtectedRoute>
+                <AppProvider>
+                  <AppRoutes />
+                </AppProvider>
+              </ProtectedRoute>
+            }
+          />
+        </Routes>
+      </AuthProvider>
     </BrowserRouter>
   );
 }
