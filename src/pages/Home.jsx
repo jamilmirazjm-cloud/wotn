@@ -1,13 +1,29 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut } from 'lucide-react';
+import { LogOut, Download } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
+import { claimLegacyData } from '../lib/api';
 
 export default function Home({ onOpenAddPerson }) {
   const { people, refreshPeople } = useApp();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [migrating, setMigrating] = useState(false);
+  const [migrationDone, setMigrationDone] = useState(false);
+
+  const handleClaimLegacyData = async () => {
+    setMigrating(true);
+    try {
+      const result = await claimLegacyData();
+      setMigrationDone(true);
+      if (result.migrated > 0) refreshPeople();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setMigrating(false);
+    }
+  };
 
   useEffect(() => {
     refreshPeople();
@@ -43,6 +59,35 @@ export default function Home({ onOpenAddPerson }) {
           </button>
         </div>
       </div>
+
+      {/* Legacy data migration banner */}
+      {!migrationDone && (
+        <div className="migration-banner">
+          <div className="migration-banner-text">
+            <strong>Have existing data?</strong>
+            <span>Claim your pre-auth observations and people in one click.</span>
+          </div>
+          <button
+            className="migration-btn"
+            onClick={handleClaimLegacyData}
+            disabled={migrating}
+          >
+            {migrating ? (
+              <span className="login-spinner" style={{ borderColor: 'rgba(45,45,94,0.2)', borderTopColor: 'var(--accent-primary)' }} />
+            ) : (
+              <Download size={14} />
+            )}
+            {migrating ? 'Claiming…' : 'Claim data'}
+          </button>
+        </div>
+      )}
+
+      {migrationDone && (
+        <div className="migration-success">
+          Your previous data has been claimed successfully.
+        </div>
+      )}
+
       <p className="page-subtitle">
         {people.length === 0
           ? 'Start by adding someone you want to understand better'

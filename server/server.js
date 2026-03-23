@@ -134,6 +134,38 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
   }
 });
 
+// POST /api/auth/claim-legacy-data — reassign pre-auth data to the authenticated user
+app.post('/api/auth/claim-legacy-data', authenticateToken, async (req, res) => {
+  const LEGACY_USER_ID = 'imiraz_mvp';
+
+  try {
+    // Check if legacy data exists
+    const check = await db.query(
+      `SELECT COUNT(*) FROM people WHERE user_id = $1`,
+      [LEGACY_USER_ID]
+    );
+    const count = parseInt(check.rows[0].count, 10);
+
+    if (count === 0) {
+      return res.json({ migrated: 0, message: 'No legacy data found to claim' });
+    }
+
+    // Reassign all legacy people (observations, predictions, outcomes link via person_id)
+    const result = await db.query(
+      `UPDATE people SET user_id = $1 WHERE user_id = $2 RETURNING id`,
+      [req.user_id, LEGACY_USER_ID]
+    );
+
+    res.json({
+      migrated: result.rowCount,
+      message: `${result.rowCount} ${result.rowCount === 1 ? 'person' : 'people'} successfully claimed`
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ============================================================================
 // Apply auth middleware to all remaining /api/* routes
 // ============================================================================

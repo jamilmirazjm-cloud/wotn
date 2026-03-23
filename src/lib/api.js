@@ -81,6 +81,15 @@ export async function getOutcomes(personId) {
   return camelize(await res.json());
 }
 
+export async function claimLegacyData() {
+  const res = await fetch(`${API_URL}/auth/claim-legacy-data`, {
+    method: 'POST',
+    headers: getHeaders()
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
 export async function createOutcome({ personId, predictionId, goal, whatHappened, predictionAccuracyRating }) {
   const res = await fetch(`${API_URL}/outcomes`, {
     method: 'POST',
