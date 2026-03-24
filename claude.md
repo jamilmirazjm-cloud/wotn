@@ -13,6 +13,10 @@ The application has been redesigned from a dark tech aesthetic to a **warm minim
 - **Build Tool**: Vite 8.0.1
 - **Styling**: CSS with CSS variables (custom properties)
 - **Backend**: Node.js server (Express-based)
+- **Authentication**: JWT (JSON Web Tokens) with bcryptjs password hashing
+- **Database**: PostgreSQL with node-postgres (pg) driver
+- **Password Hashing**: bcryptjs (12-round salting)
+- **Token Signing**: jsonwebtoken library
 
 ---
 
@@ -21,21 +25,30 @@ The application has been redesigned from a dark tech aesthetic to a **warm minim
 ```
 wotn/
 ├── src/
-│   ├── App.jsx                 # Main app component with routing
-│   ├── index.css              # Global design system & styles
+│   ├── App.jsx                   # Main app component with routing + ProtectedRoute wrapper
+│   ├── index.css                 # Global design system & styles
+│   ├── context/
+│   │   └── AuthContext.jsx       # Authentication state management (user, token, login/logout)
+│   ├── components/
+│   │   └── ProtectedRoute.jsx    # Route wrapper that enforces authentication
 │   ├── pages/
-│   │   ├── Home.jsx           # Landing/home page
-│   │   ├── ProfileView.jsx    # User profile & observation history
-│   │   ├── AddObservation.jsx # Form for adding new observations
-│   │   ├── PredictScreen.jsx  # Prediction generation & results
-│   │   ├── PlaybookScreen.jsx # Action cards & tactical advice
-│   │   └── IntelligenceView.jsx # Intelligence/insights dashboard
-│   └── main.jsx               # React DOM render entry point
+│   │   ├── Home.jsx              # Landing/home page (auth required, legacy data claim button)
+│   │   ├── LoginPage.jsx         # Login/registration form (no auth required)
+│   │   ├── ProfileView.jsx       # User profile & observation history (auth required)
+│   │   ├── AddObservation.jsx    # Form for adding new observations (auth required)
+│   │   ├── PredictScreen.jsx     # Prediction generation & results (auth required)
+│   │   ├── PlaybookScreen.jsx    # Action cards & tactical advice (auth required)
+│   │   └── IntelligenceView.jsx  # Intelligence/insights dashboard (auth required)
+│   └── main.jsx                  # React DOM render entry point
 ├── server/
-│   └── server.js              # Backend API server
-├── index.html                 # HTML entry point
-├── vite.config.js            # Vite build configuration
-└── package.json              # Dependencies & scripts
+│   ├── server.js                 # Backend API server (auth endpoints + JWT middleware)
+│   ├── package.json              # Backend dependencies (express, bcryptjs, jsonwebtoken)
+│   └── package-lock.json
+├── index.html                    # HTML entry point
+├── vite.config.js               # Vite build configuration
+├── package.json                 # Frontend dependencies & scripts
+├── claude.md                     # Project documentation (this file)
+└── .env.local                    # Environment variables (not committed, JWT_SECRET here)
 ```
 
 ---
@@ -258,9 +271,245 @@ import { Search, FileText, Sparkles, Brain } from 'lucide-react';
   - Trend visualization
   - Historical insights
 
+### LoginPage.jsx
+- **Purpose**: Combined authentication form for registration and login
+- **Key Elements**: Username/password inputs, toggle between modes, error display
+- **Features**:
+  - Username/password validation
+  - Toggle between "Login" and "Register" modes
+  - Error messages for failed authentication
+  - Loading state during submission
+  - Warm editorial design matching app aesthetic
+  - Form submission with async API calls
+
+### AuthContext.jsx
+- **Purpose**: Global authentication state management
+- **Key Elements**: User state, token management, auth methods
+- **Features**:
+  - Manages user object and JWT token
+  - Reads token from localStorage on app initialization
+  - Provides login(username, password) method
+  - Provides register(username, password) method
+  - Provides logout() method
+  - useAuth() hook for access in components
+
+### ProtectedRoute.jsx
+- **Purpose**: Route wrapper that enforces authentication
+- **Key Elements**: Route guarding, redirection
+- **Features**:
+  - Checks if user is authenticated via AuthContext
+  - Redirects unauthenticated users to /login
+  - Allows authenticated users to access wrapped routes
+  - Used to wrap: ProfileView, PredictScreen, PlaybookScreen, IntelligenceView
+
+---
+
+## Authentication System
+
+### Overview
+
+The app uses **JWT (JSON Web Tokens)** for stateless, secure authentication:
+
+- **Registration**: Users create an account with username/password (password bcrypt-hashed)
+- **Login**: Returns a 7-day JWT token that's stored in localStorage
+- **Token-based API**: All subsequent API requests include the JWT token in the Authorization header
+- **Session Persistence**: Token survives page refreshes; auto-login on app load
+- **Protected Routes**: Unauthenticated users redirected to /login
+
+### Registration & Login Flow
+
+```
+1. User navigates to LoginPage
+2. Enters username and password
+3. Selects "Register" (new account) or "Login" (existing account)
+4. Frontend calls POST /api/auth/register or POST /api/auth/login
+5. Backend validates credentials, creates JWT token
+6. Frontend receives token + user info (id, username)
+7. AuthContext saves token to localStorage + Redux state
+8. User redirected to Home page
+9. All subsequent API requests include token in Authorization header
+10. User stays logged in until logout() is called or token expires (7 days)
+```
+
+### Protected Routes in App
+
+Routes are wrapped with `<ProtectedRoute>` to prevent access before login:
+
+```javascript
+<Routes>
+  <Route path="/login" element={<LoginPage />} />
+  <Route element={<ProtectedRoute />}>
+    <Route path="/" element={<Home />} />
+    <Route path="/profile" element={<ProfileView />} />
+    <Route path="/predict" element={<PredictScreen />} />
+    <Route path="/playbook" element={<PlaybookScreen />} />
+    <Route path="/intelligence" element={<IntelligenceView />} />
+  </Route>
+</Routes>
+```
+
+### AuthContext API
+
+**useAuth() hook returns:**
+```typescript
+{
+  user: { id: string, username: string } | null;
+  token: string | null;
+  isAuthenticated: boolean;
+  login(username: string, password: string): Promise<void>;
+  register(username: string, password: string): Promise<void>;
+  logout(): void;
+}
+```
+
+**Usage in components:**
+```javascript
+import { useAuth } from '../context/AuthContext';
+
+function MyComponent() {
+  const { user, logout } = useAuth();
+
+  return (
+    <div>
+      <p>Hello, {user?.username}</p>
+      <button onClick={logout}>Logout</button>
+    </div>
+  );
+}
+```
+
+### Backend Authentication Endpoints
+
+**POST /api/auth/register**
+- Request: `{ username: string, password: string }`
+- Response: `{ token: string, user: { id, username, created_at } }`
+- Validation: username ≥ 3 chars, password ≥ 6 chars
+- Error: 400 if username already taken or invalid input
+
+**POST /api/auth/login**
+- Request: `{ username: string, password: string }`
+- Response: `{ token: string, user: { id, username, created_at } }`
+- Validation: username/password must match in database
+- Error: 401 if credentials incorrect
+
+**GET /api/auth/me** (Protected)
+- Headers: `Authorization: Bearer <token>`
+- Response: `{ id, username, created_at }`
+- Error: 401 if token invalid/expired
+
+**POST /api/auth/claim-legacy-data** (Protected)
+- Headers: `Authorization: Bearer <token>`
+- Effect: Reassigns all pre-auth data (user_id='imiraz_mvp') to authenticated user
+- Response: `{ migrated: number, message: string }`
+- See **Data Migration** section below
+
+### Middleware: authenticateToken
+
+Applied to all `/api/*` routes (except /auth/register and /auth/login):
+
+```javascript
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) return res.status(401).json({ error: 'Token required' });
+
+  jwt.verify(token, JWT_SECRET, (err, payload) => {
+    if (err) return res.status(401).json({ error: 'Invalid token' });
+    req.user_id = payload.id;
+    next();
+  });
+};
+```
+
+### Database Schema: Users Table
+
+```sql
+CREATE TABLE users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  username VARCHAR(255) UNIQUE NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+---
+
+## Data Migration: Legacy Data Claiming
+
+### Why This Exists
+
+Before authentication was implemented, all API requests used a hardcoded user ID header: `X-User-Id: 'imiraz_mvp'`. This meant all pre-auth data in the `people` table had `user_id = 'imiraz_mvp'`.
+
+After implementing auth, new user accounts get a UUID as their user_id. Without migration, old data becomes orphaned—it won't appear for any authenticated user.
+
+### How to Claim Legacy Data
+
+**Frontend: Claim Data Button**
+- Home page displays a migration banner for new users: "Have existing data? Claim your pre-auth observations and people in one click"
+- Clicking "Claim data" calls POST /api/auth/claim-legacy-data
+- On success, all old data instantly appears in ProfileView
+
+**Backend: claim-legacy-data Endpoint**
+```javascript
+POST /api/auth/claim-legacy-data
+- Requires: JWT token (authenticated user)
+- Effect: UPDATE people SET user_id = <current user> WHERE user_id = 'imiraz_mvp'
+- Response: { migrated: count, message: "X people successfully claimed" }
+- Safe: Can be called multiple times (second call returns migrated: 0)
+```
+
+**Cascade Effect**
+- The `people` table uses `user_id` as the FK to the `users` table
+- All linked data (observations, predictions, outcomes, intelligence) reference `person_id`
+- One UPDATE to `people.user_id` automatically makes all related data accessible to the authenticated user
+
 ---
 
 ## Development Guidelines
+
+### Environment Variables
+
+**Required for production:**
+
+```bash
+JWT_SECRET=<long-random-string>  # Used to sign/verify JWT tokens
+JWT_EXPIRES_IN=7d                 # Token expiration (e.g., '7d', '24h')
+```
+
+**How to set:**
+- **Development**: Add to `.env.local` file (not committed to git)
+- **Render**: Go to dashboard → Service Settings → Environment tab → Add variables
+
+**Generate JWT_SECRET:**
+```bash
+openssl rand -hex 32
+```
+
+### Using AuthContext in Components
+
+To access current user and auth methods:
+
+```javascript
+import { useAuth } from '../context/AuthContext';
+
+export default function MyComponent() {
+  const { user, isAuthenticated, logout } = useAuth();
+
+  if (!isAuthenticated) {
+    return <p>Please log in</p>;
+  }
+
+  return (
+    <div>
+      <h1>Welcome, {user.username}!</h1>
+      <button onClick={logout}>Log out</button>
+    </div>
+  );
+}
+```
+
+---
 
 ### Component Structure
 
