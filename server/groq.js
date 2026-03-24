@@ -66,9 +66,23 @@ HARD BOUNDARIES - YOU MUST REFUSE:
 5. Action cards must be tactical, not preachy
 6. Output ONLY valid JSON, no markdown or explanation
 
+## SCENARIO-BASED PREDICTIONS
+
+When a scenario is provided (a description of what just happened or is about to happen):
+1. Acknowledge the scenario back — "What you described: [brief recap]"
+2. Make predictions SPECIFIC to THIS scenario, not generic advice
+3. Reference observations that support your prediction
+4. Provide tactical advice for THIS exact moment (exact words/actions to use)
+5. Identify what to avoid in THIS specific situation
+6. Write as if talking to a friend who knows the person — never clinical language
+
+BAD (generic): "She exhibits conflict-avoidant behaviors"
+GOOD (scenario-specific): "She probably felt disrespected when challenged in public. That triggered defensiveness. Address it privately next time."
+
 ## RETURN VALID JSON ONLY
 
 {
+  "scenario_acknowledgment": "Brief recap of what user described (null if no scenario)",
   "behavioral_tendencies": ["specific tendency grounded in logs", "another specific tendency", "optional third"],
   "personality_read": {
     "mbti": "Type (inferred) or unclear",
@@ -85,29 +99,46 @@ HARD BOUNDARIES - YOU MUST REFUSE:
   "prediction_note": "optional caveat"
 }`;
 
-function assembleContextPackage(person, observations, goal) {
+function assembleContextPackage(person, observations, goal, scenario) {
   const obsText = observations
     .map((obs, idx) => {
       const date = new Date(obs.logged_at).toLocaleDateString();
       const tags = obs.tags?.length ? ` [${obs.tags.join(', ')}]` : '';
-      return `${idx + 1}. (${date}${tags}) ${obs.text}`;
+      const category = obs.signal_category ? ` {${obs.signal_category}}` : '';
+      return `${idx + 1}. (${date}${tags}${category}) ${obs.text}`;
     })
     .join('\n');
 
+  // Build signal category summary for tagged observations
+  const categoryMap = {};
+  for (const obs of observations) {
+    if (obs.signal_category) {
+      if (!categoryMap[obs.signal_category]) categoryMap[obs.signal_category] = 0;
+      categoryMap[obs.signal_category]++;
+    }
+  }
+  const categorySummary = Object.keys(categoryMap).length > 0
+    ? `\nSignal category coverage: ${Object.entries(categoryMap).map(([k, v]) => `${k}(${v})`).join(', ')}`
+    : '';
+
+  const scenarioBlock = scenario
+    ? `\nSCENARIO (what just happened or is about to happen):\n"${scenario}"\n\nGenerate a prediction SPECIFIC to THIS scenario. Acknowledge the scenario, tie to observations, and give tactical advice for THIS exact moment.`
+    : '';
+
   return `Profile: ${person.name} (${person.relationship_type})
 Goal: ${goal}
-
+${scenarioBlock}
 Observations about this person (newest first):
 ${obsText}
-
+${categorySummary}
 Based on these observations, generate a behavioral analysis for the goal: ${goal}.`;
 }
 
-async function requestGroqPrediction(person, observations, goal) {
+async function requestGroqPrediction(person, observations, goal, scenario) {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) throw new Error('GROQ_API_KEY is not configured on the backend.');
 
-  const contextPackage = assembleContextPackage(person, observations, goal);
+  const contextPackage = assembleContextPackage(person, observations, goal, scenario);
 
   const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',

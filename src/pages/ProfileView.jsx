@@ -1,14 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Search, FileText, Sparkles, Brain, ClipboardList } from 'lucide-react';
+import { Search, FileText, Sparkles, Brain, ClipboardList, Layers, ChevronRight } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { getQualityLabel } from '../lib/btpQuestions';
 
 export default function ProfileView() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { people, refreshPeople, getObservations, getPredictions, removePerson } = useApp();
+  const { people, refreshPeople, getObservations, getPredictions, getBtpProgress, removePerson } = useApp();
   const [observations, setObservations] = useState([]);
   const [predictions, setPredictions] = useState([]);
+  const [btpProgress, setBtpProgress] = useState({ completedCategories: 0, totalCategories: 7 });
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const person = people.find((p) => p.id === id);
@@ -17,7 +19,11 @@ export default function ProfileView() {
     await refreshPeople();
     setObservations(await getObservations(id));
     setPredictions(await getPredictions(id));
-  }, [id, refreshPeople, getObservations, getPredictions]);
+    try {
+      const progress = await getBtpProgress(id);
+      setBtpProgress(progress);
+    } catch (e) { /* ignore if endpoint not ready */ }
+  }, [id, refreshPeople, getObservations, getPredictions, getBtpProgress]);
 
   useEffect(() => {
     loadData();
@@ -71,6 +77,37 @@ export default function ProfileView() {
           </p>
         )}
       </div>
+
+      {/* Build the Picture Banner */}
+      <button className="btp-banner" onClick={() => navigate(`/person/${id}/build-picture`)}>
+        <div className="btp-banner-left">
+          <svg className="btp-mini-ring" viewBox="0 0 40 40">
+            <circle cx="20" cy="20" r="17" fill="none" stroke="var(--border-subtle)" strokeWidth="3" />
+            <circle
+              cx="20" cy="20" r="17"
+              fill="none"
+              stroke="var(--accent-primary)"
+              strokeWidth="3"
+              strokeLinecap="round"
+              strokeDasharray={`${(btpProgress.completedCategories / 7) * 107} 107`}
+              transform="rotate(-90 20 20)"
+            />
+          </svg>
+          <div>
+            <div className="btp-banner-title">
+              <Layers size={16} />
+              <span>Build the Picture</span>
+            </div>
+            <div className="btp-banner-subtitle">
+              {btpProgress.completedCategories === 0
+                ? 'Answer guided questions to build a detailed behavioral profile'
+                : `${btpProgress.completedCategories}/7 categories answered — ${getQualityLabel(btpProgress.completedCategories).label}`
+              }
+            </div>
+          </div>
+        </div>
+        <ChevronRight size={18} className="text-tertiary" />
+      </button>
 
       {/* Action Buttons */}
       <div style={{ display: 'flex', gap: '12px', marginBottom: '32px' }}>

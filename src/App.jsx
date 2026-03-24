@@ -10,6 +10,7 @@ import AddObservation from './pages/AddObservation';
 import PredictScreen from './pages/PredictScreen';
 import PlaybookScreen from './pages/PlaybookScreen';
 import IntelligenceView from './pages/IntelligenceView';
+import BuildThePicture from './pages/BuildThePicture';
 import AddPersonDialog from './components/AddPersonDialog';
 import './index.css';
 
@@ -43,6 +44,7 @@ function AppRoutes() {
         <Route path="/person/:id/predict" element={<PredictScreen />} />
         <Route path="/person/:id/playbook/:predictionId" element={<PlaybookScreen />} />
         <Route path="/person/:id/intelligence" element={<IntelligenceView />} />
+        <Route path="/person/:id/build-picture" element={<BuildThePicture />} />
       </Routes>
 
       <AddPersonDialog

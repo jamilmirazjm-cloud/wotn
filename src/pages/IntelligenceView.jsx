@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Star } from 'lucide-react';
+import { Star, Eye, Shield, ChevronDown, ChevronUp } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 export default function IntelligenceView() {
@@ -10,6 +10,8 @@ export default function IntelligenceView() {
   const [observations, setObservations] = useState([]);
   const [predictions, setPredictions] = useState([]);
   const [outcomes, setOutcomes] = useState([]);
+  const [activeTab, setActiveTab] = useState('intelligence'); // 'intelligence' | 'audit'
+  const [expandedPrediction, setExpandedPrediction] = useState(null);
 
   const person = people.find((p) => p.id === id);
 
@@ -46,6 +48,17 @@ export default function IntelligenceView() {
     ? (ratedOutcomes.reduce((sum, o) => sum + o.predictionAccuracyRating, 0) / ratedOutcomes.length).toFixed(1)
     : null;
 
+  // Audit helpers
+  const getObsSentToGroq = (pred) => {
+    return observations.filter((o) => new Date(o.loggedAt) <= new Date(pred.createdAt));
+  };
+
+  const getConfidenceLevel = (obsCount) => {
+    if (obsCount >= 11) return { label: 'High', className: 'rich' };
+    if (obsCount >= 4) return { label: 'Medium', className: 'moderate' };
+    return { label: 'Low', className: 'thin' };
+  };
+
   return (
     <div className="page">
       <button className="back-btn" onClick={() => navigate(`/person/${id}`)} id="intel-back-btn">
@@ -55,6 +68,120 @@ export default function IntelligenceView() {
       <h1 className="page-title">Intelligence</h1>
       <p className="page-subtitle">Complete behavioral profile for {person.name}</p>
 
+      {/* Tab Switcher */}
+      <div className="tab-switcher">
+        <button
+          className={`tab-btn ${activeTab === 'intelligence' ? 'active' : ''}`}
+          onClick={() => setActiveTab('intelligence')}
+        >
+          <Eye size={16} />
+          <span>Intelligence</span>
+        </button>
+        <button
+          className={`tab-btn ${activeTab === 'audit' ? 'active' : ''}`}
+          onClick={() => setActiveTab('audit')}
+        >
+          <Shield size={16} />
+          <span>Audit</span>
+        </button>
+      </div>
+
+      {activeTab === 'audit' && (
+        <div className="audit-dashboard">
+          <p className="text-sm text-secondary mb-lg">
+            Transparency into what data was sent to the AI and how predictions were generated.
+          </p>
+
+          {predictions.length === 0 ? (
+            <div className="empty-state" style={{ padding: '32px 0' }}>
+              <h3 className="empty-state-title">No predictions yet</h3>
+              <p className="empty-state-text">Generate a prediction to see audit data here.</p>
+            </div>
+          ) : (
+            predictions.map((pred) => {
+              const obsUsed = getObsSentToGroq(pred);
+              const confidence = getConfidenceLevel(obsUsed.length);
+              const isExpanded = expandedPrediction === pred.id;
+
+              return (
+                <div key={pred.id} className="audit-card">
+                  <button
+                    className="audit-card-header"
+                    onClick={() => setExpandedPrediction(isExpanded ? null : pred.id)}
+                  >
+                    <div>
+                      <div className="audit-card-title">{pred.goal}</div>
+                      <div className="text-xs text-tertiary">{formatDate(pred.createdAt)}</div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span className={`badge badge-${confidence.className}`}>{confidence.label}</span>
+                      {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    </div>
+                  </button>
+
+                  {isExpanded && (
+                    <div className="audit-card-body">
+                      {/* Observations sent */}
+                      <div className="audit-section">
+                        <div className="audit-section-title">Observations Sent ({obsUsed.length})</div>
+                        {obsUsed.map((obs) => (
+                          <div key={obs.id} className="audit-obs-item">
+                            <div className="text-xs text-tertiary">{formatDate(obs.loggedAt)}</div>
+                            <div className="text-sm">{obs.text}</div>
+                            {obs.tags && obs.tags.length > 0 && (
+                              <div className="timeline-tags" style={{ marginTop: '4px' }}>
+                                {obs.tags.map((tag) => (
+                                  <span key={tag} className="timeline-tag">{tag}</span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Scenario if present */}
+                      {pred.scenario && (
+                        <div className="audit-section">
+                          <div className="audit-section-title">Scenario Context</div>
+                          <div className="audit-scenario-text">{pred.scenario}</div>
+                        </div>
+                      )}
+
+                      {/* Validation Checklist */}
+                      <div className="audit-section">
+                        <div className="audit-section-title">Validation Checklist</div>
+                        <div className="audit-checklist">
+                          <div className={`audit-check-item ${obsUsed.length > 0 ? 'pass' : 'fail'}`}>
+                            {obsUsed.length > 0 ? '✓' : '✗'} Observations provided
+                          </div>
+                          <div className={`audit-check-item ${obsUsed.length >= 4 ? 'pass' : 'warn'}`}>
+                            {obsUsed.length >= 4 ? '✓' : '⚠'} Sufficient data (4+ observations)
+                          </div>
+                          <div className={`audit-check-item ${pred.behavioralTendencies?.length > 0 ? 'pass' : 'fail'}`}>
+                            {pred.behavioralTendencies?.length > 0 ? '✓' : '✗'} Behavioral tendencies generated
+                          </div>
+                          <div className={`audit-check-item ${pred.personalityRead ? 'pass' : 'fail'}`}>
+                            {pred.personalityRead ? '✓' : '✗'} Personality read generated
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Raw prediction output */}
+                      <div className="audit-section">
+                        <div className="audit-section-title">Raw AI Output</div>
+                        <pre className="audit-raw-json">{JSON.stringify(pred, null, 2)}</pre>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+
+      {activeTab === 'intelligence' && (
+      <>
       {/* Stats */}
       <div className="stats-row">
         <div className="stat-item">
@@ -193,6 +320,8 @@ export default function IntelligenceView() {
             </div>
           ))}
         </>
+      )}
+      </>
       )}
     </div>
   );

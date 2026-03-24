@@ -17,8 +17,11 @@ export default function PredictScreen() {
   const navigate = useNavigate();
   const { people, loading, error, clearError, requestPrediction, refreshPeople, getObservations } = useApp();
   const [goal, setGoal] = useState('');
+  const [scenario, setScenario] = useState('');
+  const [step, setStep] = useState('goal'); // 'goal' | 'scenario' | 'results'
   const [prediction, setPrediction] = useState(null);
   const [personalityOpen, setPersonalityOpen] = useState(false);
+  const [examplesOpen, setExamplesOpen] = useState(false);
 
   const person = people.find((p) => p.id === id);
 
@@ -32,12 +35,13 @@ export default function PredictScreen() {
     if (!goal) return;
     clearError();
     try {
-      const result = await requestPrediction(id, goal);
+      const result = await requestPrediction(id, goal, scenario || undefined);
       setPrediction(result);
+      setStep('results');
     } catch {
       // Error is handled by context
     }
-  }, [id, goal, clearError, requestPrediction]);
+  }, [id, goal, scenario, clearError, requestPrediction]);
 
   if (!person) return null;
 
@@ -53,8 +57,8 @@ export default function PredictScreen() {
         ← {person.name}
       </button>
 
-      {!prediction ? (
-        /* ---- Goal Selection ---- */
+      {step === 'goal' && (
+        /* ---- Step 1: Goal Selection ---- */
         <>
           <h1 className="page-title">Predict Behavior</h1>
           <p className="page-subtitle">
@@ -100,13 +104,100 @@ export default function PredictScreen() {
 
           <button
             className="btn btn-primary btn-full btn-lg mt-lg"
-            onClick={handlePredict}
-            disabled={!goal || loading}
-            id="generate-prediction-btn"
+            onClick={() => setStep('scenario')}
+            disabled={!goal}
+            id="continue-to-scenario-btn"
           >
-            <Sparkles size={18} />
-            <span>{loading ? 'Analyzing patterns...' : 'Generate Prediction'}</span>
+            <span>Continue</span>
           </button>
+        </>
+      )}
+
+      {step === 'scenario' && (
+        /* ---- Step 2: Scenario Context ---- */
+        <>
+          <h1 className="page-title">What's happening right now?</h1>
+          <p className="page-subtitle">
+            With {person.name} — {goal}
+          </p>
+
+          <div className="scenario-guidance">
+            <p className="text-sm text-secondary" style={{ marginBottom: '8px', fontWeight: 500 }}>
+              The more specific you are, the more accurate the prediction.
+            </p>
+            <ul className="scenario-hints">
+              <li>What specifically happened?</li>
+              <li>What did they say or do?</li>
+              <li>How did you react?</li>
+              <li>What are you hoping will happen?</li>
+            </ul>
+          </div>
+
+          <textarea
+            className="scenario-textarea"
+            value={scenario}
+            onChange={(e) => setScenario(e.target.value)}
+            placeholder={`E.g., "${person.name} got upset when I said their idea wouldn't work. Won't explain why. I felt dismissed."`}
+            maxLength={1000}
+          />
+          <div className="scenario-footer">
+            <span className={`scenario-char-count ${scenario.length > 0 && scenario.length < 30 ? 'insufficient' : ''}`}>
+              {scenario.length}/1000
+              {scenario.length > 0 && scenario.length < 30 && ' (min 30 for best results)'}
+            </span>
+          </div>
+
+          <button
+            className="collapsible-header mt-md"
+            onClick={() => setExamplesOpen(!examplesOpen)}
+            style={{ width: '100%', cursor: 'pointer' }}
+          >
+            <span className="text-sm text-secondary">Example scenarios</span>
+            <span className={`collapsible-arrow ${examplesOpen ? 'open' : ''}`}>▼</span>
+          </button>
+          {examplesOpen && (
+            <div className="scenario-examples">
+              {[
+                `I asked ${person.name} to cover a shift and they said no sharply. Normally they'd apologize, but this time they just walked away.`,
+                `We haven't talked in a week. Now ${person.name} is being short with me but won't say what's wrong.`,
+                `I brought up an idea in the team meeting and ${person.name} immediately shot it down. Later they seemed annoyed with me.`,
+              ].map((ex, i) => (
+                <button
+                  key={i}
+                  className="scenario-example-card"
+                  onClick={() => setScenario(ex)}
+                >
+                  <span className="text-xs text-secondary">"{ex}"</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {error && (
+            <div className="error-banner mt-md">
+              <span className="error-banner-text">{error}</span>
+              <button className="error-banner-close" onClick={clearError}>×</button>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
+            <button
+              className="btn btn-ghost"
+              onClick={() => setStep('goal')}
+            >
+              Back
+            </button>
+            <button
+              className="btn btn-primary"
+              style={{ flex: 1 }}
+              onClick={handlePredict}
+              disabled={loading || (scenario.length > 0 && scenario.length < 30)}
+              id="generate-prediction-btn"
+            >
+              <Sparkles size={18} />
+              <span>{loading ? 'Analyzing...' : scenario.length >= 30 ? 'Generate Prediction' : 'Skip Scenario & Generate'}</span>
+            </button>
+          </div>
 
           {loading && (
             <div className="loading-container" style={{ padding: '24px' }}>
@@ -117,8 +208,10 @@ export default function PredictScreen() {
             </div>
           )}
         </>
-      ) : (
-        /* ---- Results ---- */
+      )}
+
+      {step === 'results' && prediction && (
+        /* ---- Step 3: Results ---- */
         <>
           <h1 className="page-title">{person.name}</h1>
           <p className="page-subtitle">Behavioral Analysis — {goal}</p>

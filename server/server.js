@@ -26,6 +26,13 @@ async function initDb() {
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+  // Build the Picture columns on observations
+  await db.query(`ALTER TABLE observations ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'live_log'`);
+  await db.query(`ALTER TABLE observations ADD COLUMN IF NOT EXISTS signal_category VARCHAR(50)`);
+  await db.query(`ALTER TABLE observations ADD COLUMN IF NOT EXISTS question_id VARCHAR(50)`);
+  await db.query(`ALTER TABLE observations ADD COLUMN IF NOT EXISTS relationship_context VARCHAR(50)`);
+  // Scenario column on predictions
+  await db.query(`ALTER TABLE predictions ADD COLUMN IF NOT EXISTS scenario TEXT`);
 }
 initDb().catch(console.error);
 
@@ -241,17 +248,50 @@ app.get('/api/people/:personId', async (req, res) => {
 
 // POST /api/observations
 app.post('/api/observations', async (req, res) => {
-  const { personId, text, tags, sentiment } = req.body;
+  const { personId, text, tags, sentiment, source, signalCategory, questionId, relationshipContext } = req.body;
   try {
     const verify = await db.query('SELECT 1 FROM people WHERE id = $1 AND user_id = $2', [personId, req.user_id]);
     if (verify.rows.length === 0) return res.status(403).json({ error: 'Unauthorized' });
 
     const result = await db.query(
-      `INSERT INTO observations (person_id, text, tags, sentiment)
-       VALUES ($1, $2, $3, $4) RETURNING *`,
-      [personId, text, tags || [], sentiment]
+      `INSERT INTO observations (person_id, text, tags, sentiment, source, signal_category, question_id, relationship_context)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      [personId, text, tags || [], sentiment, source || 'live_log', signalCategory || null, questionId || null, relationshipContext || null]
     );
     res.json(result.rows[0]);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET /api/btp/progress/:personId — Build the Picture progress
+app.get('/api/btp/progress/:personId', async (req, res) => {
+  const { personId } = req.params;
+  try {
+    const verify = await db.query('SELECT 1 FROM people WHERE id = $1 AND user_id = $2', [personId, req.user_id]);
+    if (verify.rows.length === 0) return res.status(403).json({ error: 'Unauthorized' });
+
+    const result = await db.query(
+      `SELECT signal_category, question_id, text, created_at
+       FROM observations
+       WHERE person_id = $1 AND source = 'build_the_picture'
+       ORDER BY created_at DESC`,
+      [personId]
+    );
+
+    // Group by category
+    const answers = {};
+    for (const row of result.rows) {
+      if (!answers[row.signal_category]) answers[row.signal_category] = {};
+      answers[row.signal_category][row.question_id] = { text: row.text, createdAt: row.created_at };
+    }
+
+    // Count completed categories (at least 1 answer in category)
+    const completedCategories = Object.keys(answers).length;
+    const totalCategories = 7;
+
+    res.json({ answers, completedCategories, totalCategories });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Server error' });
@@ -279,18 +319,18 @@ app.get('/api/observations/:personId', async (req, res) => {
 
 // POST /api/predict
 app.post('/api/predict', async (req, res) => {
-  const { personId, goal } = req.body;
+  const { personId, goal, scenario } = req.body;
   try {
     const personRes = await db.query('SELECT * FROM people WHERE id = $1 AND user_id = $2', [personId, req.user_id]);
     if (personRes.rows.length === 0) return res.status(403).json({ error: 'Unauthorized' });
 
     const obsRes = await db.query('SELECT * FROM observations WHERE person_id = $1 ORDER BY logged_at DESC LIMIT 20', [personId]);
 
-    const prediction = await requestGroqPrediction(personRes.rows[0], obsRes.rows, goal);
+    const prediction = await requestGroqPrediction(personRes.rows[0], obsRes.rows, goal, scenario);
 
     const insertRes = await db.query(
-      `INSERT INTO predictions (person_id, goal, behavioral_tendencies, personality_read, action_cards, data_quality, prediction_note, groq_response)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      `INSERT INTO predictions (person_id, goal, behavioral_tendencies, personality_read, action_cards, data_quality, prediction_note, groq_response, scenario)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
       [
         personId, goal,
         prediction.behavioral_tendencies || [],
@@ -298,7 +338,8 @@ app.post('/api/predict', async (req, res) => {
         JSON.stringify(prediction.action_cards || []),
         prediction.data_quality,
         prediction.prediction_note,
-        JSON.stringify(prediction)
+        JSON.stringify(prediction),
+        scenario || null
       ]
     );
 

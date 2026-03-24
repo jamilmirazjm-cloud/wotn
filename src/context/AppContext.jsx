@@ -66,11 +66,11 @@ export function AppProvider({ children }) {
     return await api.getObservations(personId);
   }, []);
 
-  const requestPrediction = useCallback(async (personId, goal) => {
+  const requestPrediction = useCallback(async (personId, goal, scenario) => {
     setLoading(true);
     setError(null);
     try {
-      const prediction = await api.generatePrediction(personId, goal);
+      const prediction = await api.generatePrediction(personId, goal, scenario);
       await refreshPeople();
       return prediction;
     } catch (err) {
@@ -81,6 +81,23 @@ export function AppProvider({ children }) {
       setLoading(false);
     }
   }, [refreshPeople]);
+
+  const getBtpProgress = useCallback(async (personId) => {
+    return await api.getBtpProgress(personId);
+  }, []);
+
+  const saveBtpAnswer = useCallback(async ({ personId, text, signalCategory, questionId, relationshipContext }) => {
+    try {
+      const obs = await api.saveBtpAnswer({ personId, text, signalCategory, questionId, relationshipContext });
+      await refreshPeople();
+      showToast('Answer saved');
+      return obs;
+    } catch (e) {
+      console.error(e);
+      setError('Failed to save answer');
+      throw e;
+    }
+  }, [refreshPeople, showToast]);
 
   const getPredictions = useCallback(async (personId) => {
     return await api.getPredictions(personId);
@@ -133,6 +150,8 @@ export function AppProvider({ children }) {
     getPrediction,
     addOutcome,
     getOutcomes,
+    getBtpProgress,
+    saveBtpAnswer,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

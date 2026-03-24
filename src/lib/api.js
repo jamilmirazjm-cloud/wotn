@@ -52,20 +52,11 @@ export async function getObservations(personId) {
   return camelize(await res.json());
 }
 
-export async function createObservation({ personId, text, tags, sentiment }) {
-  const res = await fetch(`${API_URL}/observations`, {
-    method: 'POST',
-    headers: getHeaders(),
-    body: JSON.stringify({ personId, text, tags, sentiment })
-  });
-  return camelize(await res.json());
-}
-
-export async function generatePrediction(personId, goal) {
+export async function generatePrediction(personId, goal, scenario) {
   const res = await fetch(`${API_URL}/predict`, {
     method: 'POST',
     headers: getHeaders(),
-    body: JSON.stringify({ personId, goal })
+    body: JSON.stringify({ personId, goal, scenario: scenario || undefined })
   });
   if (!res.ok) throw new Error(await res.text());
   return camelize(await res.json());
@@ -88,6 +79,33 @@ export async function claimLegacyData() {
   });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
+}
+
+export async function getBtpProgress(personId) {
+  const res = await fetch(`${API_URL}/btp/progress/${personId}`, { headers: getHeaders() });
+  return camelize(await res.json());
+}
+
+export async function saveBtpAnswer({ personId, text, signalCategory, questionId, relationshipContext }) {
+  return createObservation({
+    personId,
+    text,
+    tags: [signalCategory],
+    sentiment: 'neutral',
+    source: 'build_the_picture',
+    signalCategory,
+    questionId,
+    relationshipContext,
+  });
+}
+
+export async function createObservation({ personId, text, tags, sentiment, source, signalCategory, questionId, relationshipContext }) {
+  const res = await fetch(`${API_URL}/observations`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify({ personId, text, tags, sentiment, source, signalCategory, questionId, relationshipContext })
+  });
+  return camelize(await res.json());
 }
 
 export async function createOutcome({ personId, predictionId, goal, whatHappened, predictionAccuracyRating }) {

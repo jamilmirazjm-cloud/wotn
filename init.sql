@@ -17,6 +17,10 @@ CREATE TABLE observations (
   text TEXT NOT NULL,
   tags TEXT[],
   sentiment VARCHAR(50),
+  source VARCHAR(50) DEFAULT 'live_log',
+  signal_category VARCHAR(50),
+  question_id VARCHAR(50),
+  relationship_context VARCHAR(50),
   logged_at TIMESTAMP DEFAULT NOW(),
   created_at TIMESTAMP DEFAULT NOW()
 );
